@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:file/memory.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
@@ -28,8 +29,7 @@ class PDFDoc {
     doc._file = file;
     Map data;
     try {
-      data = await _CHANNEL
-          .invokeMethod('initDoc', {"path": file.path, "password": password});
+      data = await _CHANNEL.invokeMethod('initDoc', {"path": file.path, "password": password});
     } on Exception catch (e) {
       return Future.error(e);
     }
@@ -43,8 +43,8 @@ class PDFDoc {
 
   /// Creates a [PDFDoc] object with a file path.
   /// Optionally, takes a [password] for encrypted PDF documents.
-  static Future<PDFDoc> fromPath(String path, {String password = ""}) async {
-    return await fromFile(File(path), password: password);
+  static Future<PDFDoc> fromPath(String path, {MemoryFileSystem memoryFileSystem, String password = ""}) async {
+    return await fromFile(memoryFileSystem != null ? memoryFileSystem.file(path) : File(path), password: password);
   }
 
   /// Creates a [PDFDoc] object with a URL.
@@ -56,8 +56,7 @@ class PDFDoc {
     try {
       String tempDirPath = (await getTemporaryDirectory()).path;
 
-      String filePath = join(tempDirPath, _TEMP_DIR_NAME,
-          url.split("/").last.split(".").first + ".pdf");
+      String filePath = join(tempDirPath, _TEMP_DIR_NAME, url.split("/").last.split(".").first + ".pdf");
 
       file = File(filePath);
       file.createSync(recursive: true);
@@ -97,12 +96,8 @@ class PDFDoc {
     // Reading missing pages, if any exists
     if (missingPagesNumbers.isNotEmpty) {
       try {
-        missingPagesTexts =
-            List<String>.from(await _CHANNEL.invokeMethod('getDocText', {
-          "path": _file.path,
-          "missingPagesNumbers": missingPagesNumbers,
-          "password": _password
-        }));
+        missingPagesTexts = List<String>.from(await _CHANNEL.invokeMethod(
+            'getDocText', {"path": _file.path, "missingPagesNumbers": missingPagesNumbers, "password": _password}));
       } on Exception catch (e) {
         return Future.error(e);
       }
@@ -164,11 +159,8 @@ class PDFPage {
     // Loading the text
     if (_text == null) {
       try {
-        _text = await _CHANNEL.invokeMethod('getDocPageText', {
-          "path": _parentDoc._file.path,
-          "number": number,
-          "password": _parentDoc._password
-        });
+        _text = await _CHANNEL.invokeMethod(
+            'getDocPageText', {"path": _parentDoc._file.path, "number": number, "password": _parentDoc._password});
       } on Exception catch (e) {
         return Future.error(e);
       }
@@ -196,29 +188,16 @@ class PDFDocInfo {
   PDFDocInfo._fromMap(Map data)
       : this._internal(
             data["author"],
-            data["creationDate"] != null
-                ? DateTime.tryParse(data["creationDate"])
-                : null,
-            data["modificationDate"] != null
-                ? DateTime.tryParse(data["modificationDate"])
-                : null,
+            data["creationDate"] != null ? DateTime.tryParse(data["creationDate"]) : null,
+            data["modificationDate"] != null ? DateTime.tryParse(data["modificationDate"]) : null,
             data["creator"],
             data["producer"],
-            data["keywords"] != null
-                ? List<String>.from(data["keywords"])
-                : null,
+            data["keywords"] != null ? List<String>.from(data["keywords"]) : null,
             data["title"],
             data["subject"]);
 
-  PDFDocInfo._internal(
-      this._author,
-      this._creationDate,
-      this._modificationDate,
-      this._creator,
-      this._producer,
-      this._keywords,
-      this._title,
-      this._subject);
+  PDFDocInfo._internal(this._author, this._creationDate, this._modificationDate, this._creator, this._producer,
+      this._keywords, this._title, this._subject);
 
   /// Gets the author of the document. This contains the original string of the
   /// authors contained in the document. Therefore there might be multiple
